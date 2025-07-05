@@ -1,85 +1,127 @@
 "use client"
 
-import { useWallet } from "@aptos-labs/wallet-adapter-react"
-import { PetraWallet } from "petra-plugin-wallet-adapter"
-import { PontemWallet } from "@pontem/wallet-adapter-plugin"
-import { MartianWallet } from "@martianwallet/aptos-wallet-adapter"
-import { FewchaWallet } from "fewcha-plugin-wallet-adapter"
+import { useState, useCallback } from "react"
 
-// Wallet configuration
-export const wallets = [new PetraWallet(), new PontemWallet(), new MartianWallet(), new FewchaWallet()]
+// Mock wallet types
+export interface WalletAccount {
+  address: string
+  publicKey: string
+}
 
-// Aptos network configuration
-export const APTOS_NETWORK = "testnet" // or "mainnet"
-export const APTOS_NODE_URL = "https://fullnode.testnet.aptoslabs.com/v1"
+export interface MockWallet {
+  name: string
+  icon: string
+  connect: () => Promise<WalletAccount>
+  disconnect: () => Promise<void>
+  isConnected: () => boolean
+}
 
-// Custom hook for wallet operations
-export function useAptosWallet() {
-  const {
-    connect,
-    disconnect,
-    account,
-    connected,
-    connecting,
-    wallet,
-    wallets: availableWallets,
-    signAndSubmitTransaction,
-    signMessage,
-  } = useWallet()
-
-  const connectWallet = async (walletName?: string) => {
-    try {
-      if (walletName) {
-        const selectedWallet = availableWallets.find((w) => w.name === walletName)
-        if (selectedWallet) {
-          await connect(selectedWallet.name)
-        }
-      } else {
-        // Connect to first available wallet
-        if (availableWallets.length > 0) {
-          await connect(availableWallets[0].name)
-        }
+// Mock wallet implementations
+const mockWallets: MockWallet[] = [
+  {
+    name: "Petra",
+    icon: "🟠",
+    connect: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      return {
+        address: "0x1234567890abcdef1234567890abcdef12345678",
+        publicKey: "0xabcdef1234567890abcdef1234567890abcdef12",
       }
+    },
+    disconnect: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+    },
+    isConnected: () => localStorage.getItem("wallet-connected") === "petra",
+  },
+  {
+    name: "Pontem",
+    icon: "🔵",
+    connect: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      return {
+        address: "0xabcdef1234567890abcdef1234567890abcdef12",
+        publicKey: "0x1234567890abcdef1234567890abcdef12345678",
+      }
+    },
+    disconnect: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+    },
+    isConnected: () => localStorage.getItem("wallet-connected") === "pontem",
+  },
+  {
+    name: "Martian",
+    icon: "🔴",
+    connect: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      return {
+        address: "0x9876543210fedcba9876543210fedcba98765432",
+        publicKey: "0xfedcba9876543210fedcba9876543210fedcba98",
+      }
+    },
+    disconnect: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+    },
+    isConnected: () => localStorage.getItem("wallet-connected") === "martian",
+  },
+]
+
+export function useAptosWallet() {
+  const [connected, setConnected] = useState(false)
+  const [account, setAccount] = useState<WalletAccount | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [balance, setBalance] = useState(0)
+
+  const connectWallet = useCallback(async (walletName: string) => {
+    setIsLoading(true)
+    try {
+      const wallet = mockWallets.find((w) => w.name.toLowerCase() === walletName.toLowerCase())
+      if (!wallet) throw new Error("Wallet not found")
+
+      const account = await wallet.connect()
+      setAccount(account)
+      setConnected(true)
+      setBalance(Math.random() * 100) // Mock balance
+      localStorage.setItem("wallet-connected", walletName.toLowerCase())
+      localStorage.setItem("wallet-account", JSON.stringify(account))
     } catch (error) {
       console.error("Failed to connect wallet:", error)
-      throw error
+    } finally {
+      setIsLoading(false)
     }
-  }
+  }, [])
 
-  const disconnectWallet = async () => {
+  const disconnectWallet = useCallback(async () => {
+    setIsLoading(true)
     try {
-      await disconnect()
+      setAccount(null)
+      setConnected(false)
+      setBalance(0)
+      localStorage.removeItem("wallet-connected")
+      localStorage.removeItem("wallet-account")
     } catch (error) {
       console.error("Failed to disconnect wallet:", error)
-      throw error
+    } finally {
+      setIsLoading(false)
     }
-  }
+  }, [])
 
-  const getBalance = async () => {
-    if (!account?.address) return 0
-
-    try {
-      const response = await fetch(
-        `${APTOS_NODE_URL}/accounts/${account.address}/resource/0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>`,
-      )
-      const data = await response.json()
-      return Number.parseInt(data.data.coin.value) / 100000000 // Convert from Octas to APT
-    } catch (error) {
-      console.error("Failed to get balance:", error)
-      return 0
-    }
-  }
+  const getBalance = useCallback(async () => {
+    if (!connected) return 0
+    // Mock balance fetch
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    const mockBalance = Math.random() * 100
+    setBalance(mockBalance)
+    return mockBalance
+  }, [connected])
 
   return {
+    connected,
+    account,
+    isLoading,
+    balance,
     connectWallet,
     disconnectWallet,
-    account,
-    connected,
-    connecting,
-    wallet,
-    availableWallets,
-    signAndSubmitTransaction,
-    signMessage,
     getBalance,
+    wallets: mockWallets,
   }
 }
